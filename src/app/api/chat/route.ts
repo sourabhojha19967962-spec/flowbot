@@ -231,10 +231,23 @@ function findRelevantContext(message: string): string {
     return { ...entry, score };
   });
 
-  const relevant = scored
+  // Sort by score descending
+  const sorted = scored
     .filter(e => e.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .sort((a, b) => b.score - a.score);
+
+  // Stricter selection: only return topics with meaningful relevance
+  let relevant: typeof sorted = [];
+
+  if (sorted.length > 0) {
+    const topScore = sorted[0].score;
+
+    // Only include topics that have at least 40% of the top score
+    // This filters out weak matches that might be irrelevant
+    const threshold = Math.max(topScore * 0.4, 2);
+
+    relevant = sorted.filter(e => e.score >= threshold).slice(0, 2); // Max 2 topics for focused answers
+  }
 
   if (relevant.length === 0) {
     return "No specific knowledge base match found. The bot should respond generally and offer to help with ICICI Bank Credit Card related queries.";
@@ -269,6 +282,9 @@ Your personality:
 ${hasContext ? `KNOWLEDGE BASE CONTEXT (use this to answer):\n${context}` : 'No matching knowledge base entry found. Politely explain you don\'t have specific information on this topic and suggest contacting ICICI Bank Customer Care at 1800 1080.'}
 
 CRITICAL RULES FOR CONTEXT SELECTION:
+- Use ONLY the most relevant knowledge base section to answer the question.
+- If multiple sections are provided, focus your answer on the section that BEST matches the user's specific question.
+- Do NOT include information from irrelevant sections — even if provided in context.
 - If the user asks about UPI on RuPay Credit Card (e.g., device change, re-register, UPI PIN, P2M), use ONLY the "UPI on RuPay Credit Card" section — NOT the "Payment Methods" section.
 - If the user asks about general payment methods (how to pay bill), use the "Payment Methods" section.
 - If the user asks about lost/stolen card, use ONLY "Loss, Theft & Misuse of Card" section.
@@ -276,6 +292,7 @@ CRITICAL RULES FOR CONTEXT SELECTION:
 - If the user asks about SMA/NPA/default classification, use ONLY "SMA & NPA Classification" section.
 - If the user asks about card cancellation/termination, use ONLY "Termination & Surrender of Card" section.
 - Always read the question carefully and pick the MOST RELEVANT section from the context provided.
+- If the question is about a specific fee (e.g., late payment, fuel surcharge, foreign markup), answer ONLY about that fee — do not list all fees.
 
 Rules:
 1. Answer based ONLY on the provided knowledge base context when available
