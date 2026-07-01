@@ -77,7 +77,7 @@ const knowledgeBase = [
   },
   {
     topic: "UPI on RuPay Credit Card",
-    keywords: ["upi", "rupay", "cc on upi", "p2m", "p2p", "upi pin", "4-digit"],
+    keywords: ["upi", "rupay", "cc on upi", "p2m", "p2p", "upi pin", "4-digit", "re-register", "device change", "new device", "re-registration", "change device", "sim"],
     answer: "**UPI on RuPay Credit Card Terms:**\n\n**Eligibility:**\n• ICICI Bank RuPay Credit Card users who satisfy eligibility criteria\n• Mobile number linked with UPI app must be set as registered mobile number for ICICI Bank RuPay Credit Card\n• Facility provided subject to approval at sole discretion of ICICI Bank\n\n**Activation:**\n• Set 4-digit UPI PIN to activate UPI functionality\n• All UPI payments authenticated using 4-digit UPI PIN (NOT the Credit Card PIN)\n• Setting-up UPI PIN = customer consent for activation of card\n\n**Transaction Rules:**\n• Only P2M (Person to Merchant) transactions allowed on RuPay network\n• NOT allowed: P2P, P2PM, digital account opening, lending platform, cash withdrawal at merchant/ATM, eRUPI, IPO, Foreign Inward Remittances, Mutual Funds\n• Subject to both credit card limits AND existing UPI transaction limits (whichever is lower)\n• All fees, finance charges, surcharges applicable on Credit Card transactions also apply on CC on UPI\n• Cash withdrawal NOT allowed from CC on UPI\n• Transactions deducted from existing credit card limit\n• Cannot be set as default option to receive funds\n\n**Re-registration Required:**\n• In case of renewal or replacement of card → re-register on UPI App with updated Card details\n• In case of device change → re-register for credit card on UPI app with same SIM. Previous device application de-registered."
   },
   {
@@ -307,10 +307,53 @@ Rules:
         "I'm having trouble processing that right now. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
     } catch {
       if (hasContext) {
-        const topEntry = knowledgeBase.find(entry => {
-          const lowerMsg = message.toLowerCase();
-          return entry.keywords.some(kw => lowerMsg.includes(kw.toLowerCase()));
+        // Use the same scored matching to find the BEST entry (not just the first match)
+        const lowerMsg = message.toLowerCase();
+        const scored = knowledgeBase.map(entry => {
+          let score = 0;
+          let matchedKeywords = 0;
+          entry.keywords.forEach(kw => {
+            const lowerKw = kw.toLowerCase();
+            if (lowerMsg.includes(lowerKw)) {
+              const weight = lowerKw.split(' ').length > 1 ? 3 : 1;
+              score += weight;
+              matchedKeywords++;
+            }
+          });
+          if (matchedKeywords >= 2) score += 2;
+          if (matchedKeywords >= 3) score += 3;
+
+          const msgContains = (terms: string[]) => terms.some(t => lowerMsg.includes(t));
+
+          if (entry.topic === "UPI on RuPay Credit Card" && msgContains(['rupay', 'cc on upi', 'upi on credit', 'upi pin', 'p2m', 'device change', 're-register', 'change device', 'new device'])) {
+            score += 10;
+          }
+          if (entry.topic === "Loss, Theft & Misuse of Card" && msgContains(['lost', 'stolen', 'theft', 'misuse', 'ccblk', 'block card', '5676766'])) {
+            score += 10;
+          }
+          if (entry.topic === "Termination & Surrender of Card" && msgContains(['terminate', 'surrender', 'close card', 'cancel card', 'close my card'])) {
+            score += 10;
+          }
+          if (entry.topic === "SMA & NPA Classification" && msgContains(['sma', 'npa', 'non performing', 'special mention', '90 days', 'default classification'])) {
+            score += 10;
+          }
+          if (entry.topic === "EMI & Instalment Facility" && msgContains(['emi', 'instalment', 'installment', 'foreclosure', 'prepayment', 'prepay'])) {
+            score += 8;
+          }
+          if (entry.topic === "Airport Lounge Access" && msgContains(['lounge', 'airport'])) {
+            score += 10;
+          }
+          if (entry.topic === "Payment Methods" && msgContains(['rupay', 'cc on upi', 'upi pin', 'p2m', 'device change', 're-register', 'change device'])) {
+            score -= 5;
+          }
+
+          return { ...entry, score };
         });
+
+        const topEntry = scored
+          .filter(e => e.score > 0)
+          .sort((a, b) => b.score - a.score)[0];
+
         botReply = topEntry?.answer || "I found a match in our knowledge base but couldn't format the response. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
       } else {
         botReply = "I don't have specific information about that. For detailed assistance, please contact ICICI Bank Customer Care at 1800 1080 or visit https://www.icici.bank.in/. You can also ask me about credit card fees, interest rates, reward points, billing, EMI options, lounge access, or any other ICICI credit card topic!";
