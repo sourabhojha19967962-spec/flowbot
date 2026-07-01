@@ -49,7 +49,7 @@ interface WorkflowNode {
 const quickActions = [
   { label: 'Annual Fees', message: 'What are the joining and annual fees for ICICI credit cards?', icon: Zap },
   { label: 'Interest Rates', message: 'What are the finance charges and interest rates?', icon: Cpu },
-  { label: 'Late Payment', message: 'What are the late payment charges?', icon: AlertCircle },
+  { label: 'Lost Card', message: 'What should I do if my credit card is lost or stolen?', icon: AlertCircle },
   { label: 'Reward Points', message: 'How do reward points and capping work?', icon: Database },
 ];
 
@@ -275,7 +275,7 @@ export default function DemoPage() {
             <div className="mt-4 pt-3 border-t border-slate-100">
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <BookOpen className="w-3.5 h-3.5" />
-                <span>Knowledge base: 22 MITC topics indexed</span>
+                <span>Knowledge base: 31 MITC topics indexed</span>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
                 <Cpu className="w-3.5 h-3.5" />
