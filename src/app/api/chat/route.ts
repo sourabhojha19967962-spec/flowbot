@@ -17,7 +17,7 @@ const knowledgeBase = [
   },
   {
     topic: "Late Payment Charges",
-    keywords: ["late payment", "lpc", "penal", "due date", "missed", "overdue", "minimum amount", "mad"],
+    keywords: ["late payment", "late fee", "late charge", "lpc", "penal", "penalty", "due date", "missed payment", "overdue", "minimum amount due", "mad", "cheque return", "auto-debit return"],
     answer: "**Late Payment Charges (w.e.f Nov 15, 2024)** — Excludes ICICI Bank Emeralde Private Metal Credit Card\n\nLate payment charges are a function of Total Amount Due minus any payment received before payment due date:\n\n• Less than ₹100: **Nil**\n• ₹100 - ₹500: **₹100**\n• ₹501 - ₹1,000: **₹500**\n• ₹1,001 - ₹5,000: **₹600**\n• ₹5,001 - ₹10,000: **₹750**\n• ₹10,001 - ₹25,000: **₹900**\n• ₹25,001 - ₹50,000: **₹1,100**\n• More than ₹50,000: **₹1,300**\n\n**Other Charges:**\n• Return of cheque: 2% of Total Amount Due (Min ₹500)\n• Auto-Debit return fee: 2% of Total Amount Due (Min ₹500)\n• Additional ₹50+GST will be debited from customer's saving bank account\n\n**Grace Period**: 3 days after payment due date. Late Payment Charges applicable if Minimum Amount Due is not paid by payment due date + 3 days grace period."
   },
   {
@@ -170,17 +170,27 @@ const knowledgeBase = [
 // Search knowledge base for relevant context — improved matching algorithm
 function findRelevantContext(message: string): string {
   const lowerMsg = message.toLowerCase();
-  const words = lowerMsg.split(/\s+/).filter(w => w.length > 2);
+  // Create word boundary regex for matching whole words only
+  const wordMatch = (kw: string, text: string): boolean => {
+    const lowerKw = kw.toLowerCase();
+    // For multi-word keywords, use includes (phrase matching)
+    if (lowerKw.includes(' ')) {
+      return text.includes(lowerKw);
+    }
+    // For single-word keywords, use word boundary to avoid false matches
+    // e.g., "pay" should NOT match "payment" or "repay"
+    const regex = new RegExp(`\\b${lowerKw}\\b`, 'i');
+    return regex.test(text);
+  };
 
   const scored = knowledgeBase.map(entry => {
     let score = 0;
     let matchedKeywords = 0;
 
     entry.keywords.forEach(kw => {
-      const lowerKw = kw.toLowerCase();
-      if (lowerMsg.includes(lowerKw)) {
+      if (wordMatch(kw, lowerMsg)) {
         // Longer keyword matches get higher weight (more specific)
-        const weight = lowerKw.split(' ').length > 1 ? 3 : 1;
+        const weight = kw.split(' ').length > 1 ? 3 : 1;
         score += weight;
         matchedKeywords++;
       }
@@ -193,8 +203,13 @@ function findRelevantContext(message: string): string {
     // Special intent detection — boost specific topics for specific question patterns
     const msgContains = (terms: string[]) => terms.some(t => lowerMsg.includes(t));
 
+    // Late payment questions — strong boost
+    if (entry.topic === "Late Payment Charges" && msgContains(['late payment', 'late fee', 'late charge', 'missed payment', 'overdue', 'lpc'])) {
+      score += 15;
+    }
+
     // UPI on RuPay card questions (not general UPI payments)
-    if (entry.topic === "UPI on RuPay Credit Card" && msgContains(['rupay', 'cc on upi', 'upi on credit', 'upi pin', 'p2m', 'device change', 're-register', 're-register upi', 'change device', 'new device'])) {
+    if (entry.topic === "UPI on RuPay Credit Card" && msgContains(['rupay', 'cc on upi', 'upi on credit', 'upi pin', 'p2m', 'device change', 're-register', 'change device', 'new device'])) {
       score += 10;
     }
 
@@ -223,9 +238,15 @@ function findRelevantContext(message: string): string {
       score += 10;
     }
 
-    // Penalty for Payment Methods topic when question is about UPI features (not payment methods)
-    if (entry.topic === "Payment Methods" && msgContains(['rupay', 'cc on upi', 'upi pin', 'p2m', 'device change', 're-register', 'change device'])) {
-      score -= 5;
+    // PENALTY: Payment Methods should NOT match when question is about specific fees/charges
+    if (entry.topic === "Payment Methods") {
+      if (msgContains(['late payment', 'late fee', 'finance charge', 'interest rate', 'markup', 'fuel surcharge', 'reward', 'emi', 'lounge', 'lost', 'stolen', 'rupay', 'device change', 'sma', 'npa', 'terminate', 'cancel card'])) {
+        score -= 10;
+      }
+      // Only boost Payment Methods if question is clearly about HOW to pay
+      if (msgContains(['how to pay', 'payment method', 'pay bill', 'pay my', 'pay credit card', 'ways to pay', 'neft', 'upi id', 'cheque', 'auto debit'])) {
+        score += 10;
+      }
     }
 
     return { ...entry, score };
@@ -243,10 +264,9 @@ function findRelevantContext(message: string): string {
     const topScore = sorted[0].score;
 
     // Only include topics that have at least 40% of the top score
-    // This filters out weak matches that might be irrelevant
     const threshold = Math.max(topScore * 0.4, 2);
 
-    relevant = sorted.filter(e => e.score >= threshold).slice(0, 2); // Max 2 topics for focused answers
+    relevant = sorted.filter(e => e.score >= threshold).slice(0, 2);
   }
 
   if (relevant.length === 0) {
@@ -324,53 +344,13 @@ Rules:
         "I'm having trouble processing that right now. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
     } catch {
       if (hasContext) {
-        // Use the same scored matching to find the BEST entry (not just the first match)
-        const lowerMsg = message.toLowerCase();
-        const scored = knowledgeBase.map(entry => {
-          let score = 0;
-          let matchedKeywords = 0;
-          entry.keywords.forEach(kw => {
-            const lowerKw = kw.toLowerCase();
-            if (lowerMsg.includes(lowerKw)) {
-              const weight = lowerKw.split(' ').length > 1 ? 3 : 1;
-              score += weight;
-              matchedKeywords++;
-            }
-          });
-          if (matchedKeywords >= 2) score += 2;
-          if (matchedKeywords >= 3) score += 3;
-
-          const msgContains = (terms: string[]) => terms.some(t => lowerMsg.includes(t));
-
-          if (entry.topic === "UPI on RuPay Credit Card" && msgContains(['rupay', 'cc on upi', 'upi on credit', 'upi pin', 'p2m', 'device change', 're-register', 'change device', 'new device'])) {
-            score += 10;
-          }
-          if (entry.topic === "Loss, Theft & Misuse of Card" && msgContains(['lost', 'stolen', 'theft', 'misuse', 'ccblk', 'block card', '5676766'])) {
-            score += 10;
-          }
-          if (entry.topic === "Termination & Surrender of Card" && msgContains(['terminate', 'surrender', 'close card', 'cancel card', 'close my card'])) {
-            score += 10;
-          }
-          if (entry.topic === "SMA & NPA Classification" && msgContains(['sma', 'npa', 'non performing', 'special mention', '90 days', 'default classification'])) {
-            score += 10;
-          }
-          if (entry.topic === "EMI & Instalment Facility" && msgContains(['emi', 'instalment', 'installment', 'foreclosure', 'prepayment', 'prepay'])) {
-            score += 8;
-          }
-          if (entry.topic === "Airport Lounge Access" && msgContains(['lounge', 'airport'])) {
-            score += 10;
-          }
-          if (entry.topic === "Payment Methods" && msgContains(['rupay', 'cc on upi', 'upi pin', 'p2m', 'device change', 're-register', 'change device'])) {
-            score -= 5;
-          }
-
-          return { ...entry, score };
-        });
-
-        const topEntry = scored
-          .filter(e => e.score > 0)
-          .sort((a, b) => b.score - a.score)[0];
-
+        // Reuse the same findRelevantContext function to get the BEST match
+        // The context already contains the top matches, extract the first one
+        const contextLines = context.split('\n\n');
+        const firstSection = contextLines[0];
+        const topEntry = knowledgeBase.find(entry =>
+          firstSection.startsWith(`[${entry.topic}]:`)
+        );
         botReply = topEntry?.answer || "I found a match in our knowledge base but couldn't format the response. Please try again or contact ICICI Bank Customer Care at 1800 1080.";
       } else {
         botReply = "I don't have specific information about that. For detailed assistance, please contact ICICI Bank Customer Care at 1800 1080 or visit https://www.icici.bank.in/. You can also ask me about credit card fees, interest rates, reward points, billing, EMI options, lounge access, or any other ICICI credit card topic!";
